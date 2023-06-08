@@ -1,0 +1,13 @@
+Autentikasi = auth <USERNAME> <PASSWORD>
+
+Send Private = send <TOKEN> <TUJUAN> <PESAN>
+
+Send Group = group <TOKEN> <USER1>.<USER2>.<USER DSB> <PESAN>
+
+Inbox = inbox <TOKEN>
+
+Send Private Antar Realm = send-realm <TOKEN> <TUJUAN>@<REALM_ID> <PESAN>
+
+Send Group Antar Realm = group-realm <TOKEN> <TUJUAN_1>@<REALM_ID>.<TUJUAN_2>@<REALM_ID>.<TUJUAN_3>@<REALM_ID> <PESAN>
+
+Inbox Realm (Hanya untuk debug) = inbox-realm <TUJUAN>@<REALM_ID>

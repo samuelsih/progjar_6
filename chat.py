@@ -201,6 +201,7 @@ class Chat:
 
                 case "inbox-realm":
                     # hanya untuk debug
+                    # inbox-realm <USER>@<REALM_ID>
                     username, realm_id = data[1].strip().split("@")
                     return self.realms[realm_id].chat.get_inbox(
                         username=username, realm_id=realm_id
@@ -284,7 +285,6 @@ class Chat:
     def send_group(
         self, username_from: str, username_to_send_lists: list[str], msg: str
     ) -> Dict:
-        
         for ug in username_to_send_lists:
             user = self.get_user_by_username(ug)
             if user is None:
@@ -293,7 +293,10 @@ class Chat:
         for user_to in username_to_send_lists:
             self.send_msg(username_from=username_from, username_to=user_to, msg=msg)
 
-        return {"status": "OK", "message": f"Message Sent to {', '.join(username_to_send_lists)}"}
+        return {
+            "status": "OK",
+            "message": f"Message Sent to {', '.join(username_to_send_lists)}",
+        }
 
     def get_inbox(self, username: str, realm_id: str = "default") -> Dict:
         user_from = self.get_user_by_username(username)
@@ -342,7 +345,7 @@ class Chat:
                 result[realm_id].append(username)
             else:
                 result[realm_id] = [username]
-        
+
         return result
 
 
