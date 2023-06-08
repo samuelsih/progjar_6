@@ -1,8 +1,40 @@
+import threading
+import socket
+import json
+
 from io import StringIO
 from queue import Queue
 from typing import Dict, Optional, Union
+from copy import deepcopy
 
 import shortuuid
+
+
+class Realm(threading.Thread):
+    def __init__(self, host: str, port: int, id: str, chat: "Chat"):
+        self.id = id
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.addr = (host, port)
+        self.chat = chat
+        threading.Thread.__init__(self)
+
+    def run(self):
+        print(f"Running on realm: {self.id}")
+        try:
+            self.sock.connect(self.addr)
+            while True:
+                data = self.sock.recv(4096)
+                if data:
+                    cmd = data.decode()
+                    result = self.chat.process_input(cmd)
+                    json_result = json.dumps(result)
+
+                    self.sock.sendall(json_result.encode())
+        except Exception as e:
+            print(e)
+            self.sock.close()
+            return {"status": "ERROR", "message": f"Gagal di realm: {self.id}"}
 
 
 class Chat:
@@ -31,6 +63,17 @@ class Chat:
                 "outgoing": {},
             },
         }
+        self.realms: Dict[str, Realm] = {
+            "realm1": Realm(
+                host="localhost", port=8000, id="realm1", chat=deepcopy(self)
+            ),
+            "realm2": Realm(
+                host="localhost", port=8000, id="realm2", chat=deepcopy(self)
+            ),
+        }
+
+        for _, realm in self.realms.items():
+            realm.start()
 
     def process_input(self, data: str) -> Dict:
         data = data.split(" ")
@@ -40,6 +83,7 @@ class Chat:
 
             match cmd:
                 case "auth":
+                    # auth <USERNAME> <PASSWORD>
                     username = data[1].strip()
                     password = data[2].strip()
 
@@ -50,6 +94,7 @@ class Chat:
                     return {"status": "OK", "token": token}
 
                 case "send":
+                    # send <TOKEN> <TUJUAN> <PESAN>
                     token = data[1].strip()
                     username_to = data[2].strip()
                     msg = StringIO()
@@ -58,10 +103,6 @@ class Chat:
                     if user_from is None:
                         raise Exception("User belum terauntetikasi")
 
-                    user_to = self.get_user_by_username(username_to)
-                    if user_to is None:
-                        raise Exception("User yang diinginkan tidak ditemukan")
-
                     if len(data[3:]) == 0:
                         raise IndexError
 
@@ -69,10 +110,13 @@ class Chat:
                         msg.write(f"{m} ")
 
                     return self.send_msg(
-                        user_from=user_from, user_to=user_to, msg=msg.getvalue()
+                        username_from=self.get_username_by_dict(user_from),
+                        username_to=username_to,
+                        msg=msg.getvalue(),
                     )
 
                 case "group":
+                    # group <TOKEN> <USER1>.<USER2>.<USER DSB> <PESAN>
                     token = data[1].strip()
                     username_lists = data[2].strip().split(".")
                     msg = StringIO()
@@ -84,13 +128,39 @@ class Chat:
                     if len(username_lists) == 0:
                         raise IndexError
 
-                    user_groups = []
-                    for ug in username_lists:
-                        user = self.get_user_by_username(ug)
-                        if user is None:
-                            raise Exception("User yang diinginkan tidak ditemukan")
+                    if len(data[3:]) == 0:
+                        raise IndexError
 
-                        user_groups.append(user)
+                    for m in data[3:]:
+                        msg.write(f"{m} ")
+
+                    return self.send_group(
+                        username_from=self.get_username_by_dict(user_from),
+                        username_to_send_lists=username_lists,
+                        msg=msg.getvalue(),
+                    )
+
+                case "inbox":
+                    # inbox <TOKEN>
+                    token = data[1].strip()
+                    username = self.get_username_from_token(token)
+                    if username is None:
+                        raise Exception("User belum terauntetikasi")
+
+                    return self.get_inbox(username)
+
+                case "send-realm":
+                    # send-realm <TOKEN> <TUJUAN>@<REALM_ID> <PESAN>
+                    token = data[1].strip()
+                    user_from = self.get_user_from_token(token)
+                    if user_from is None:
+                        raise Exception("User belum terauntetikasi")
+
+                    username_to, realm_id = data[2].strip().split("@")
+                    if realm_id not in self.realms:
+                        raise Exception("Realm tidak ditemukan")
+
+                    msg = StringIO()
 
                     if len(data[3:]) == 0:
                         raise IndexError
@@ -98,19 +168,43 @@ class Chat:
                     for m in data[3:]:
                         msg.write(f"{m} ")
 
-                    print(user_from, user_groups, msg.getvalue())
-
-                    return self.send_group(
-                        user_from=user_from, user_groups=user_groups, msg=msg.getvalue()
+                    return self.realms[realm_id].chat.send_msg(
+                        msg=msg.getvalue(),
+                        username_from=self.get_username_by_dict(user_from),
+                        username_to=username_to,
                     )
-                
-                case "inbox":
+
+                case "group-realm":
+                    # group-realm <TOKEN> <TUJUAN_1>@<REALM_ID>.<TUJUAN_2>@<REALM_ID>.<TUJUAN_3>@<REALM_ID> <PESAN>
                     token = data[1].strip()
-                    username = self.get_username_from_token(token)
-                    if username is None:
+                    user_from = self.get_user_from_token(token)
+                    if user_from is None:
                         raise Exception("User belum terauntetikasi")
 
-                    return self.get_inbox(username)
+                    username_lists = data[2].strip()
+                    if len(username_lists) == 0:
+                        raise IndexError
+
+                    msg = StringIO()
+
+                    if len(data[3:]) == 0:
+                        raise IndexError
+
+                    for m in data[3:]:
+                        msg.write(f"{m} ")
+
+                    return self.send_group_realm(
+                        username_from=self.get_username_by_dict(user_from),
+                        destination=username_lists,
+                        msg=msg,
+                    )
+
+                case "inbox-realm":
+                    # hanya untuk debug
+                    username, realm_id = data[1].strip().split("@")
+                    return self.realms[realm_id].chat.get_inbox(
+                        username=username, realm_id=realm_id
+                    )
 
                 case _:
                     raise IndexError
@@ -155,7 +249,15 @@ class Chat:
 
         raise Exception("Terjadi kesalahan. Coba lagi")
 
-    def send_msg(self, user_from: Dict, user_to: Dict, msg: str) -> Dict:
+    def send_msg(self, msg: str, username_from: str, username_to: str) -> Dict:
+        user_from = self.get_user_by_username(username_from)
+        if user_from is None:
+            raise Exception("User belum terauntetikasi")
+
+        user_to = self.get_user_by_username(username_to)
+        if user_to is None:
+            raise Exception("User yang diinginkan tidak ditemukan")
+
         message = {
             "msg_from": user_from["nama"],
             "msg_to": user_to["nama"],
@@ -179,15 +281,21 @@ class Chat:
             inqueue_receiver[username_from].put(message)
         return {"status": "OK", "message": "Message Sent"}
 
-    def send_group(self, user_from: Dict, user_groups: list[Dict], msg: str) -> Dict:
-        to = []
-        for user_to in user_groups:
-            to.append(user_to["nama"])
-            self.send_msg(user_from=user_from, user_to=user_to, msg=msg)
+    def send_group(
+        self, username_from: str, username_to_send_lists: list[str], msg: str
+    ) -> Dict:
+        
+        for ug in username_to_send_lists:
+            user = self.get_user_by_username(ug)
+            if user is None:
+                raise Exception("User yang diinginkan tidak ditemukan")
 
-        return {"status": "OK", "message": f"Message Sent to {', '.join(to)}"}
+        for user_to in username_to_send_lists:
+            self.send_msg(username_from=username_from, username_to=user_to, msg=msg)
 
-    def get_inbox(self, username: str) -> Dict:
+        return {"status": "OK", "message": f"Message Sent to {', '.join(username_to_send_lists)}"}
+
+    def get_inbox(self, username: str, realm_id: str = "default") -> Dict:
         user_from = self.get_user_by_username(username)
         incoming = user_from["incoming"]
 
@@ -198,7 +306,44 @@ class Chat:
             while not incoming[users].empty():
                 msgs[users].append(user_from["incoming"][users].get_nowait())
 
-        return {"status": "OK", "messages": msgs}
+        return {"status": "OK", "realm": realm_id, "messages": msgs}
+
+    def send_group_realm(self, username_from: str, destination: str, msg: str) -> Dict:
+        user_from = self.get_user_by_username(username_from)
+        if user_from is None:
+            raise Exception("User belum terauntetikasi")
+
+        reformat_destination = self.__rearrange_realm_destination(destination)
+
+        response = {"status_all_realm": "OK"}
+
+        for realm_id, users in reformat_destination.items():
+            result = self.realms[realm_id].chat.send_group(
+                username_from=username_from, username_to_send_lists=users, msg=msg
+            )
+            response[realm_id] = result
+
+        return response
+
+    def __rearrange_realm_destination(self, destination: str) -> Dict:
+        elements = destination.split(".")
+        if len(elements) == 0:
+            raise IndexError
+
+        result: Dict[str, list[str]] = {}
+
+        for element in elements:
+            username, realm_id = element.split("@")
+
+            if realm_id not in self.realms:
+                raise Exception(f"Realm {realm_id} tidak ditemukan")
+
+            if realm_id in result:
+                result[realm_id].append(username)
+            else:
+                result[realm_id] = [username]
+        
+        return result
 
 
 if __name__ == "__main__":

@@ -2,10 +2,8 @@ import json
 import os
 import socket
 
-TARGET_IP = "127.0.0.1"
-TARGET_PORT = 8889
 
-addr = ('localhost', 8000)
+addr = ("localhost", 8000)
 
 
 class ChatClient:
@@ -41,8 +39,28 @@ class ChatClient:
                     message = ""
                     for w in j[2:]:
                         message = "{} {}".format(message, w)
-                    
+
                     return self.group(groups_to, message)
+
+                case "send-realm":
+                    destination = j[1].strip()
+                    message = ""
+                    for w in j[2:]:
+                        message = "{} {}".format(message, w)
+
+                    return self.send_realm(destination, message)
+
+                case "group-realm":
+                    destination = j[1].strip()
+                    message = ""
+                    for w in j[2:]:
+                        message = "{} {}".format(message, w)
+
+                    return self.send_group_realm(destination, message)
+
+                case "inbox-realm":
+                    destination = j[1].strip()
+                    return self.send_inbox_realm(destination)
 
         except IndexError:
             return "-Maaf, command tidak benar"
@@ -52,7 +70,7 @@ class ChatClient:
             self.sock.sendall(string.encode())
             receivemsg = ""
             while True:
-                data = self.sock.recv(2048)
+                data = self.sock.recv(4096)
                 print("diterima dari server", data)
                 if data:
                     # data harus didecode agar dapat di operasikan dalam bentuk string
@@ -93,7 +111,7 @@ class ChatClient:
             return "{}".format(json.dumps(result["messages"]))
         else:
             return "Error, {}".format(result["message"])
-        
+
     def group(self, to, message):
         if self.tokenid == "":
             return "Error, not authorized"
@@ -101,6 +119,38 @@ class ChatClient:
         result = self.sendstring(string)
         if result["status"] == "OK":
             return "{}".format(json.dumps(result["message"]))
+        else:
+            return "Error, {}".format(result["message"])
+
+    def send_realm(self, destination: str, message: str):
+        if self.tokenid == "":
+            return "Error, not authorized"
+
+        string = "send-realm {} {} \r\n".format(self.tokenid, destination, message)
+        result = self.sendstring(string)
+        if result["status"] == "OK":
+            return "{}".format(json.dumps(result["message"]))
+        else:
+            return "Error, {}".format(result["message"])
+
+    def send_group_realm(self, destination: str, message: str):
+        if self.tokenid == "":
+            return "Error, not authorized"
+        string = "group-realm {} {} {} \r\n".format(self.tokenid, destination, message)
+        result = self.sendstring(string)
+        if result["status_all_realm"] == "OK":
+            return "{}".format(json.dumps(result["message"]))
+        else:
+            return "Error, {}".format(result["message"])
+
+    def send_inbox_realm(self, destination: str):
+        if self.tokenid == "":
+            return "Error, not authorized"
+
+        string = "inbox-realm {} \r\n".format(destination)
+        result = self.sendstring(string)
+        if result["status"] == "OK":
+            return "{}".format(json.dumps(result["messages"]))
         else:
             return "Error, {}".format(result["message"])
 
