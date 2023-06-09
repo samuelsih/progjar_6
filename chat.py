@@ -193,15 +193,16 @@ class Chat:
                     for m in data[3:]:
                         msg.write(f"{m} ")
 
+                    print(username_lists, msg.getvalue())
+
                     return self.send_group_realm(
                         username_from=self.get_username_by_dict(user_from),
                         destination=username_lists,
-                        msg=msg,
+                        msg=msg.getvalue(),
                     )
 
                 case "inbox-realm":
                     # hanya untuk debug
-                    # inbox-realm <USER>@<REALM_ID>
                     username, realm_id = data[1].strip().split("@")
                     return self.realms[realm_id].chat.get_inbox(
                         username=username, realm_id=realm_id
@@ -285,6 +286,7 @@ class Chat:
     def send_group(
         self, username_from: str, username_to_send_lists: list[str], msg: str
     ) -> Dict:
+        
         for ug in username_to_send_lists:
             user = self.get_user_by_username(ug)
             if user is None:
@@ -293,10 +295,7 @@ class Chat:
         for user_to in username_to_send_lists:
             self.send_msg(username_from=username_from, username_to=user_to, msg=msg)
 
-        return {
-            "status": "OK",
-            "message": f"Message Sent to {', '.join(username_to_send_lists)}",
-        }
+        return {"status": "OK", "message": f"Message Sent to {', '.join(username_to_send_lists)}"}
 
     def get_inbox(self, username: str, realm_id: str = "default") -> Dict:
         user_from = self.get_user_by_username(username)
@@ -314,11 +313,11 @@ class Chat:
     def send_group_realm(self, username_from: str, destination: str, msg: str) -> Dict:
         user_from = self.get_user_by_username(username_from)
         if user_from is None:
-            raise Exception("User belum terauntetikasi")
+            raise Exception("User tidak ada")
 
         reformat_destination = self.__rearrange_realm_destination(destination)
 
-        response = {"status_all_realm": "OK"}
+        response = {"status": "OK"}
 
         for realm_id, users in reformat_destination.items():
             result = self.realms[realm_id].chat.send_group(
@@ -345,7 +344,7 @@ class Chat:
                 result[realm_id].append(username)
             else:
                 result[realm_id] = [username]
-
+        
         return result
 
 

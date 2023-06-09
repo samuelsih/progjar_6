@@ -7,7 +7,7 @@ from chat import Chat
 
 chatserver = Chat()
 
-addr = ("localhost", 8000)
+addr = ("127.0.0.1", 8000)
 
 
 class ProcessTheClient(threading.Thread):

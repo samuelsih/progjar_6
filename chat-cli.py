@@ -115,7 +115,7 @@ class ChatClient:
     def group(self, to, message):
         if self.tokenid == "":
             return "Error, not authorized"
-        string = "group {} {} \r\n".format(self.tokenid, to, message)
+        string = "group {} {} {} \r\n".format(self.tokenid, to, message)
         result = self.sendstring(string)
         if result["status"] == "OK":
             return "{}".format(json.dumps(result["message"]))
@@ -126,7 +126,7 @@ class ChatClient:
         if self.tokenid == "":
             return "Error, not authorized"
 
-        string = "send-realm {} {} \r\n".format(self.tokenid, destination, message)
+        string = "send-realm {} {} {} \r\n".format(self.tokenid, destination, message)
         result = self.sendstring(string)
         if result["status"] == "OK":
             return "{}".format(json.dumps(result["message"]))
@@ -138,10 +138,10 @@ class ChatClient:
             return "Error, not authorized"
         string = "group-realm {} {} {} \r\n".format(self.tokenid, destination, message)
         result = self.sendstring(string)
-        if result["status_all_realm"] == "OK":
-            return "{}".format(json.dumps(result["message"]))
+        if result["status"] == "OK":
+            return "{}".format(json.dumps(result))
         else:
-            return "Error, {}".format(result["message"])
+            return "Error, {}".format(result)
 
     def send_inbox_realm(self, destination: str):
         if self.tokenid == "":
@@ -152,7 +152,7 @@ class ChatClient:
         if result["status"] == "OK":
             return "{}".format(json.dumps(result["messages"]))
         else:
-            return "Error, {}".format(result["message"])
+            return "Error, {}".format(result["messages"])
 
 
 if __name__ == "__main__":
